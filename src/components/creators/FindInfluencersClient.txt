@@ -1,0 +1,507 @@
+"use client";
+
+import { useMemo, useState, useEffect } from "react";
+import {
+  Grid3x3,
+  LayoutList,
+  Search,
+  SlidersHorizontal,
+  X,
+  Loader2,
+} from "lucide-react";
+import type {
+  Creator,
+  Platform,
+  CreatorCategory,
+  CreatorStatus,
+} from "@/lib/mock-data/types";
+import { CreatorCard } from "./CreatorCard";
+import { Pagination } from "@/components/ui/pagination";
+import { useToast } from "@/components/ui/toast";
+import { useCreatorsStore } from "@/lib/store/creatorsStore";
+
+type SortKey = "relevance" | "followers" | "engagement" | "avgViews";
+type ViewMode = "grid" | "list";
+
+type ApiCreator = {
+  id: string;
+  name: string;
+  handle: string | null;
+  thumbnail: string | null;
+  description: string;
+  followers: number;
+  avgViews: number;
+  engagementRate: number;
+  platform: "YouTube";
+};
+
+type YouTubeSearchResponse = {
+  creators: ApiCreator[];
+};
+
+const platforms: Platform[] = ["Instagram", "TikTok", "YouTube", "X"];
+const categories: CreatorCategory[] = [
+  "Lifestyle",
+  "Tech",
+  "Beauty",
+  "Fitness",
+  "Food",
+  "Travel",
+  "Fashion",
+  "Business",
+];
+
+function Chip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`shrink-0 rounded-full px-3.5 py-1.5 text-[12.5px] font-medium transition-colors ${
+        active
+          ? "bg-im-ink text-white"
+          : "border border-black/8 bg-white text-im-ink hover:bg-black/2"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+export function FindInfluencersClient({
+  creators: initialCreators,
+}: {
+  creators: Creator[];
+}) {
+  const toast = useToast();
+  const { addCreator } = useCreatorsStore();
+
+  const [query, setQuery] = useState("");
+  const [selectedPlatform, setSelectedPlatform] = useState<Platform | "All">(
+    "All",
+  );
+  const [selectedCategory, setSelectedCategory] = useState<
+    CreatorCategory | "All"
+  >("All");
+  const [minEngagement, setMinEngagement] = useState<number | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>("relevance");
+  const [view, setView] = useState<ViewMode>("grid");
+  const [showFilters, setShowFilters] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  const [isSearching, setIsSearching] = useState(false);
+  const [youtubeCreators, setYoutubeCreators] = useState<Creator[]>([]);
+  const [useMockData, setUseMockData] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      if (query.trim().length >= 2) {
+        setIsSearching(true);
+        try {
+          const res = await fetch(
+            `/api/youtube/search?q=${encodeURIComponent(query.trim())}&limit=15`,
+          );
+
+          // 1. Check if the response is actually OK
+          if (!res.ok) {
+            throw new Error(`API responded with status: ${res.status}`);
+          }
+
+          // 2. Read as text first to safely catch HTML errors
+          const text = await res.text();
+
+          let data: YouTubeSearchResponse;
+          try {
+            data = JSON.parse(text);
+          } catch (parseError) {
+            console.error(
+              "❌ API returned HTML instead of JSON. Response preview:",
+              text.substring(0, 200),
+            );
+            throw new Error("Invalid JSON response from server");
+          }
+
+          if (data.creators && data.creators.length > 0) {
+            const mapped: Creator[] = data.creators.map((c: ApiCreator) => {
+              const newCreator: Creator = {
+                id: c.id,
+                name: c.name,
+                handle:
+                  c.handle || `@${c.name.toLowerCase().replace(/\s+/g, "")}`,
+                avatarInitials: c.name
+                  .split(" ")
+                  .map((n: string) => n[0])
+                  .join("")
+                  .substring(0, 2)
+                  .toUpperCase(),
+                avatarUrl: c.thumbnail || undefined,
+                platform: c.platform,
+                followers: c.followers,
+                engagementRate: c.engagementRate,
+                location: "Global",
+                country: "Global",
+                status: "Available" as CreatorStatus,
+                category: "Tech" as CreatorCategory,
+                verified: c.followers > 100000,
+                avgViews: c.avgViews,
+                bio: c.description || "No description available.",
+              };
+
+              addCreator(newCreator);
+              return newCreator;
+            });
+            setYoutubeCreators(mapped);
+            setUseMockData(false);
+          } else {
+            setUseMockData(true);
+          }
+        } catch (err) {
+          console.error("YouTube search failed:", err);
+          setUseMockData(true);
+          toast.error(
+            "Search failed",
+            "Could not reach YouTube. Showing local data.",
+          );
+        } finally {
+          setIsSearching(false);
+        }
+      } else {
+        setUseMockData(true);
+      }
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [query, toast, addCreator]);
+
+  const activeCreators = useMockData ? initialCreators : youtubeCreators;
+
+  const filtered = useMemo(() => {
+    let list = [...activeCreators];
+
+    if (!useMockData) {
+      return list;
+    }
+
+    if (selectedPlatform !== "All") {
+      list = list.filter((c) => c.platform === selectedPlatform);
+    }
+    if (selectedCategory !== "All") {
+      list = list.filter((c) => c.category === selectedCategory);
+    }
+    if (minEngagement !== null) {
+      list = list.filter((c) => c.engagementRate >= minEngagement);
+    }
+
+    switch (sortKey) {
+      case "followers":
+        list.sort((a, b) => b.followers - a.followers);
+        break;
+      case "engagement":
+        list.sort((a, b) => b.engagementRate - a.engagementRate);
+        break;
+      case "avgViews":
+        list.sort((a, b) => b.avgViews - a.avgViews);
+        break;
+    }
+
+    return list;
+  }, [
+    activeCreators,
+    useMockData,
+    selectedPlatform,
+    selectedCategory,
+    minEngagement,
+    sortKey,
+  ]);
+
+  const paginatedCreators = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, currentPage, pageSize]);
+
+  const updateFilter = (updater: () => void) => {
+    updater();
+    setCurrentPage(1);
+  };
+
+  const activeFilterCount = [
+    selectedPlatform !== "All",
+    selectedCategory !== "All",
+    minEngagement !== null,
+  ].filter(Boolean).length;
+
+  const clearAll = () => {
+    setQuery("");
+    setSelectedPlatform("All");
+    setSelectedCategory("All");
+    setMinEngagement(null);
+    setSortKey("relevance");
+    setCurrentPage(1);
+    setUseMockData(true);
+  };
+
+  const handleSaveList = () => {
+    if (filtered.length === 0) {
+      toast.warning(
+        "No creators to save",
+        "Adjust your filters to find creators first.",
+      );
+      return;
+    }
+    toast.success(
+      "List saved",
+      `${filtered.length} creator${filtered.length === 1 ? "" : "s"} saved to your shortlist.`,
+    );
+  };
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-im-pink/10 px-2.5 py-1 text-[11px] font-medium text-im-pink">
+            <span className="size-1.5 rounded-full bg-im-pink" />
+            Discovery
+          </span>
+          <h1 className="mt-3 text-[34px] leading-none font-semibold tracking-tight">
+            Creator Discovery
+          </h1>
+          <p className="mt-3 text-[14px] text-im-muted">
+            {useMockData
+              ? "Search vetted creators across Africa. Filter by platform, niche, and engagement."
+              : `Found real YouTube channels matching "${query}"`}
+          </p>
+        </div>
+        <button
+          onClick={handleSaveList}
+          className="rounded-2xl bg-im-ink px-5 py-3 text-[14px] font-semibold text-white transition-opacity hover:opacity-90"
+        >
+          Save as list ({filtered.length})
+        </button>
+      </div>
+
+      <div className="mt-6 flex flex-col gap-3 lg:flex-row lg:items-center">
+        <label className="im-card flex h-12.5 min-w-0 flex-1 items-center gap-3 rounded-2xl px-4 relative">
+          <Search className="size-4 shrink-0 text-im-muted" />
+          <input
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setCurrentPage(1);
+            }}
+            placeholder="Search YouTube channels or local creators..."
+            className="min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-im-muted/70"
+          />
+          {isSearching && (
+            <Loader2 className="size-4 animate-spin text-im-violet" />
+          )}
+          {query && !isSearching && (
+            <button
+              onClick={() => {
+                setQuery("");
+                setUseMockData(true);
+              }}
+              className="grid size-6 place-items-center rounded-full hover:bg-black/5"
+              aria-label="Clear search"
+            >
+              <X className="size-3.5 text-im-muted" />
+            </button>
+          )}
+        </label>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`im-card flex h-12.5 items-center gap-2 rounded-2xl px-4 text-[13px] font-medium transition-colors lg:hidden ${
+              showFilters ? "bg-im-ink text-white" : ""
+            }`}
+          >
+            <SlidersHorizontal className="size-4" strokeWidth={1.75} />
+            Filters
+            {activeFilterCount > 0 && (
+              <span
+                className={`grid size-5 place-items-center rounded-full text-[10px] font-semibold ${
+                  showFilters
+                    ? "bg-white text-im-ink"
+                    : "bg-im-violet text-white"
+                }`}
+              >
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+
+          <div className="im-card flex h-12.5 items-center gap-1 rounded-2xl p-1">
+            {(["relevance", "followers", "engagement"] as SortKey[]).map(
+              (key) => (
+                <button
+                  key={key}
+                  onClick={() => updateFilter(() => setSortKey(key))}
+                  className={`hidden rounded-xl px-3 py-1.5 text-[12px] font-medium transition-colors sm:block ${
+                    sortKey === key
+                      ? "bg-im-ink text-white"
+                      : "text-im-muted hover:text-im-ink"
+                  }`}
+                >
+                  {key.charAt(0).toUpperCase() + key.slice(1)}
+                </button>
+              ),
+            )}
+          </div>
+
+          <div className="im-card flex h-12.5 items-center gap-1 rounded-2xl p-1">
+            <button
+              onClick={() => setView("grid")}
+              className={`grid size-10 place-items-center rounded-xl transition-colors ${
+                view === "grid"
+                  ? "bg-im-ink text-white"
+                  : "text-im-muted hover:text-im-ink"
+              }`}
+              aria-label="Grid view"
+            >
+              <Grid3x3 className="size-4" strokeWidth={1.75} />
+            </button>
+            <button
+              onClick={() => setView("list")}
+              className={`grid size-10 place-items-center rounded-xl transition-colors ${
+                view === "list"
+                  ? "bg-im-ink text-white"
+                  : "text-im-muted hover:text-im-ink"
+              }`}
+              aria-label="List view"
+            >
+              <LayoutList className="size-4" strokeWidth={1.75} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className={`${showFilters ? "block" : "hidden"} lg:block`}>
+        <div className="mt-4 space-y-3">
+          <div>
+            <p className="mb-2 text-[11px] font-medium tracking-[0.14em] text-im-muted/80 uppercase">
+              Platform
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Chip
+                label="All platforms"
+                active={selectedPlatform === "All"}
+                onClick={() => updateFilter(() => setSelectedPlatform("All"))}
+              />
+              {platforms.map((p) => (
+                <Chip
+                  key={p}
+                  label={p}
+                  active={selectedPlatform === p}
+                  onClick={() => updateFilter(() => setSelectedPlatform(p))}
+                />
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="mb-2 text-[11px] font-medium tracking-[0.14em] text-im-muted/80 uppercase">
+              Category
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Chip
+                label="All categories"
+                active={selectedCategory === "All"}
+                onClick={() => updateFilter(() => setSelectedCategory("All"))}
+              />
+              {categories.map((c) => (
+                <Chip
+                  key={c}
+                  label={c}
+                  active={selectedCategory === c}
+                  onClick={() => updateFilter(() => setSelectedCategory(c))}
+                />
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="mb-2 text-[11px] font-medium tracking-[0.14em] text-im-muted/80 uppercase">
+              Minimum engagement
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Chip
+                label="Any"
+                active={minEngagement === null}
+                onClick={() => updateFilter(() => setMinEngagement(null))}
+              />
+              {[2, 4, 6, 8].map((v) => (
+                <Chip
+                  key={v}
+                  label={`≥ ${v}%`}
+                  active={minEngagement === v}
+                  onClick={() => updateFilter(() => setMinEngagement(v))}
+                />
+              ))}
+            </div>
+          </div>
+          {activeFilterCount > 0 && (
+            <button
+              onClick={clearAll}
+              className="flex items-center gap-1.5 text-[12px] font-medium text-im-violet hover:text-im-violet/80"
+            >
+              <X className="size-3.5" />
+              Clear all filters
+            </button>
+          )}
+        </div>
+      </div>
+
+      {filtered.length === 0 && !isSearching ? (
+        <div className="im-card mt-6 flex flex-col items-center justify-center rounded-3xl px-6 py-16 text-center">
+          <div className="grid size-14 place-items-center rounded-2xl bg-im-surface">
+            <X className="size-6 text-im-muted" strokeWidth={1.75} />
+          </div>
+          <h3 className="mt-4 text-[16px] font-semibold text-im-ink">
+            No creators match
+          </h3>
+          <p className="mt-2 max-w-sm text-[13px] text-im-muted">
+            Try adjusting your filters or search terms to discover more
+            creators.
+          </p>
+          <button
+            onClick={clearAll}
+            className="mt-5 rounded-xl bg-im-ink px-4 py-2.5 text-[13px] font-semibold text-white hover:opacity-90"
+          >
+            Reset filters
+          </button>
+        </div>
+      ) : (
+        <>
+          {view === "grid" ? (
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {paginatedCreators.map((c) => (
+                <CreatorCard key={c.id} creator={c} view="grid" />
+              ))}
+            </div>
+          ) : (
+            <div className="mt-6 space-y-3">
+              {paginatedCreators.map((c) => (
+                <CreatorCard key={c.id} creator={c} view="list" />
+              ))}
+            </div>
+          )}
+
+          {!useMockData ? null : (
+            <Pagination
+              currentPage={currentPage}
+              totalItems={filtered.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
+          )}
+        </>
+      )}
+    </div>
+  );
+}

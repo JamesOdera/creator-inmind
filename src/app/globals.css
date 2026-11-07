@@ -1,26 +1,169 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-jost);
+  --color-im-ink: #0a0a0b;
+  --color-im-muted: #6e6e78;
+  --color-im-pink: #ff4fd8;
+  --color-im-violet: #8b5cf6;
+  --color-im-surface: #f6f6f8;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  min-height: 100vh;
+  background: #f4f4f7;
+  color: var(--color-im-ink);
+  font-family: var(--font-jost), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgba(139, 92, 246, 0.18);
+}
+
+.im-atmosphere {
+  background:
+    radial-gradient(
+      ellipse 80% 55% at 12% -10%,
+      rgba(255, 79, 216, 0.16),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 50% at 88% 0%,
+      rgba(139, 92, 246, 0.14),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 50% 40% at 50% 100%,
+      rgba(255, 79, 216, 0.06),
+      transparent 60%
+    ),
+    #f3f3f6;
+}
+
+.im-atmosphere-dark {
+  background:
+    radial-gradient(
+      ellipse 70% 50% at 15% -5%,
+      rgba(255, 79, 216, 0.22),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 60% 45% at 90% 10%,
+      rgba(139, 92, 246, 0.2),
+      transparent 48%
+    ),
+    #050505;
+}
+
+.im-text-gradient {
+  background: linear-gradient(
+    120deg,
+    #ff7ae8 0%,
+    #ff4fd8 28%,
+    #a78bfa 68%,
+    #8b5cf6 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ---- white surface ---- */
+.im-card {
+  background: #fff;
+  border: 1px solid rgba(10, 10, 11, 0.04);
+  box-shadow:
+    0 1px 2px rgba(10, 10, 11, 0.04),
+    0 14px 34px -14px rgba(10, 10, 11, 0.08);
+}
+
+/* ---- scrollbars ---- */
+.im-scroll::-webkit-scrollbar,
+main::-webkit-scrollbar {
+  width: 8px;
+}
+.im-scroll::-webkit-scrollbar-thumb,
+main::-webkit-scrollbar-thumb {
+  background: rgba(10, 10, 11, 0.28);
+  border-radius: 999px;
+}
+.im-scroll::-webkit-scrollbar-track,
+main::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---- skeleton shimmer ---- */
+.im-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: rgba(10, 10, 11, 0.06);
+}
+.im-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.75),
+    transparent
+  );
+  animation: im-sheen 1.6s ease-in-out infinite;
+}
+@keyframes im-sheen {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* ---- empty/error illustration rings ---- */
+.im-ring {
+  animation: im-ring 3.2s ease-out infinite;
+}
+@keyframes im-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+/* ---- toast auto-dismiss bar (dismisses on animationend, pauses on hover) ---- */
+.im-toast-bar {
+  animation-name: im-toast-progress;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+@keyframes im-toast-progress {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .im-skeleton::after,
+  .im-ring {
+    animation: none;
+  }
+}
+
+/* pause auto-dismiss while hovering or focusing a toast */
+.im-toast:hover .im-toast-bar,
+.im-toast:focus-within .im-toast-bar {
+  animation-play-state: paused;
 }
